@@ -1,6 +1,6 @@
 # Active Directory Home Lab
 
-A complete home lab setup of Windows Server 2022 Active Directory Domain Services (AD DS) running in VirtualBox on a Windows 11 host. This lab covers domain controller promotion, OU structure, user and group management, Group Policy, client domain join, and network drive mapping.
+A complete home lab setup of Windows Server 2022 Active Directory Domain Services (AD DS) running in VirtualBox on a Windows 11 host. This lab covers domain controller promotion, OU structure, user and group management, Group Policy, client domain join, network drive mapping, and account lockout policy.
 
 ---
 
@@ -12,6 +12,7 @@ A complete home lab setup of Windows Server 2022 Active Directory Domain Service
 - [Phase 2 — Active Directory Structure](#phase-2--active-directory-structure)
 - [Phase 3 — Client VM Setup and Domain Join](#phase-3--client-vm-setup-and-domain-join)
 - [Phase 4 — Group Policy](#phase-4--group-policy)
+- [Phase 5 — Account Lockout Policy](#phase-5--account-lockout-policy)
 - [Key Commands Reference](#key-commands-reference)
 - [Skills Demonstrated](#skills-demonstrated)
 
@@ -376,6 +377,76 @@ All three shares visible: NETLOGON, SharedDrive, SYSVOL ✅
 
 ---
 
+## Phase 5 — Account Lockout Policy
+
+### Step 12: Configure Account Lockout Policy
+
+Edited the **Default Domain Policy** via Group Policy Management (`gpmc.msc`):
+
+```
+Computer Configuration
+  → Policies
+    → Windows Settings
+      → Security Settings
+        → Account Policies
+          → Account Lockout Policy
+```
+
+| Setting | Value |
+|---|---|
+| Account lockout threshold | 5 invalid attempts |
+| Account lockout duration | 15 minutes |
+| Reset account lockout counter after | 15 minutes |
+
+Applied policy on Client1:
+```cmd
+gpupdate /force
+```
+
+---
+
+### Step 13: Test Account Lockout
+
+Logged out Ali Ahmed on Client1, then deliberately entered the wrong password 5 times at the login screen.
+
+After the 5th failed attempt, the account was locked and the following message appeared:
+
+![Account Locked Out](screenshots/VirtualBoxVM_ZlDH8AVAfh.png)
+
+> **"The referenced account is currently locked out and may not be logged on to."**
+
+This confirms the lockout policy is actively enforced by DC1 across all domain-joined machines.
+
+---
+
+### Step 14: Find Locked Accounts on DC1
+
+```powershell
+Search-ADAccount -LockedOut | Select Name, SamAccountName
+```
+
+![Locked Account Found](screenshots/VirtualBoxVM_oNd65zFFJr.png)
+
+Output confirmed Ali Ahmed's account (`ali`) was locked out.
+
+---
+
+### Step 15: Unlock the Account
+
+```powershell
+Unlock-ADAccount -Identity "ali"
+```
+
+![Account Unlocked](screenshots/VirtualBoxVM_N6vjQGNJct.png)
+
+Account successfully unlocked. Ali Ahmed was then able to log back in normally on Client1.
+
+![Login Screen After Unlock](screenshots/VirtualBoxVM_hNoMz7RwRj.png)
+
+> In a real environment, this is exactly how a Help Desk technician handles a "I can't log in" ticket — search for locked accounts on the DC and unlock them via PowerShell or ADUC, without needing to touch the client machine at all.
+
+---
+
 ## Key Commands Reference
 
 ```powershell
@@ -420,6 +491,15 @@ Get-NetConnectionProfile
 
 # Map network drive manually
 net use Z: \\192.168.10.1\SharedDrive /persistent:yes
+
+# Find all locked out accounts
+Search-ADAccount -LockedOut | Select Name, SamAccountName
+
+# Unlock a specific account
+Unlock-ADAccount -Identity "ali"
+
+# Check account lockout status
+Get-ADUser -Identity "ali" -Properties LockedOut | Select Name, LockedOut
 ```
 
 ---
@@ -439,6 +519,7 @@ net use Z: \\192.168.10.1\SharedDrive /persistent:yes
 | Domain join | Client machine joined to lab.local |
 | AD authentication | Domain user login on client machine |
 | Group Policy | Password policy, drive mapping GPO |
+| Account Lockout Policy | Lockout threshold, duration, unlock via PowerShell |
 | SMB shares | Creating and securing network shares |
 | PowerShell | AD cmdlets, firewall, network configuration |
 | Troubleshooting | SMB signing, network profiles, GPO debugging |
