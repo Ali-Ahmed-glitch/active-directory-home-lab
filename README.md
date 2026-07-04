@@ -537,7 +537,7 @@ Get-ADUser -Identity "ali" -Properties LockedOut | Select Name, LockedOut
 
 ## Next Steps
 
-- [ ] Delegation of Control (Help Desk password reset permissions)
+- [x] Delegation of Control (Help Desk password reset permissions)
 - [ ] Fine-Grained Password Policies (different rules per group)
 - [ ] Folder Redirection via GPO
 - [ ] Restrict Control Panel access for standard users via GPO
@@ -545,3 +545,104 @@ Get-ADUser -Identity "ali" -Properties LockedOut | Select Name, LockedOut
 - [ ] DHCP Server role configuration
 - [ ] AD Recycle Bin and object recovery practice
 - [ ] `dcdiag` and `repadmin` health check practice
+
+---
+
+## Phase 6 — Delegation of Control
+
+### Overview
+Delegation of Control allows specific users or groups to perform limited administrative tasks in Active Directory without being Domain Admins. This follows the **principle of least privilege** — users get only the permissions they need, nothing more.
+
+### Step 16: Create HelpDesk Group and User
+
+Created via Active Directory Users and Computers (`dsa.msc`):
+
+- Created Security Group: `HelpDesk` (Global, Security) in the IT OU
+- Created user: `Shabbeer Ali` (`shabbeer`) in the IT OU
+- Added Shabbeer to the HelpDesk group
+
+Verified group membership via PowerShell:
+
+```powershell
+Get-ADGroupMember -Identity "HelpDesk"
+```
+
+![HelpDesk Group Member](screenshots/VirtualBoxVM_zG9J2lGunY.png)
+
+Confirmed: `Shabbeer Ali` (`shabbeer`) is a member of the HelpDesk group.
+
+---
+
+### Step 17: Delegate Control on OUs
+
+Used the **Delegation of Control Wizard** on the IT, Sales, and HR OUs:
+
+Right-click OU → **Delegate Control** → Add `HelpDesk` group → Select tasks:
+
+![Delegation of Control Wizard](screenshots/VirtualBoxVM_wLJrEQ811x.png)
+
+Tasks delegated:
+- ✅ Reset user passwords and force password change at next logon
+- ✅ Unlock user accounts
+
+Applied to: **IT**, **Sales**, and **HR** OUs.
+
+---
+
+### Step 18: Test — Password Reset as HelpDesk User
+
+Tested by running commands **as Shabbeer** using stored credentials on DC1:
+
+```powershell
+$cred = Get-Credential
+# Entered LAB\shabbeer credentials when prompted
+```
+
+**Reset Ali Ahmed's password as Shabbeer:**
+
+```powershell
+Set-ADAccountPassword -Identity "ali" -NewPassword (ConvertTo-SecureString "Newpass@2026" -AsPlainText -Force) -Reset -Credential $cred
+```
+
+![Password Reset Success](screenshots/VirtualBoxVM_Em3M1srctT.png)
+
+Result: Command completed with no errors ✅
+
+---
+
+### Step 19: Test — Unlock Account as HelpDesk User
+
+```powershell
+Unlock-ADAccount -Identity "ali" -Credential $cred
+```
+
+![Unlock Account Success](screenshots/VirtualBoxVM_aSJ3sqj6zl.png)
+
+Result: Account unlocked successfully ✅
+
+---
+
+### Step 20: Prove Least Privilege — Admin Task Should Fail
+
+Attempted to create a new user as Shabbeer to confirm he cannot perform tasks beyond what was delegated:
+
+```powershell
+New-ADUser -Name "Test User" -SamAccountName "testuser" -Credential $cred
+```
+
+![Access Denied - Create User](screenshots/VirtualBoxVM_rCNgN1RIA6.png)
+
+Result: **Access Denied** — `AuthenticationException` ✅
+
+---
+
+### Summary
+
+| Action | Result |
+|---|---|
+| Reset password as `shabbeer` | ✅ Success |
+| Unlock account as `shabbeer` | ✅ Success |
+| Create new user as `shabbeer` | ❌ Access Denied |
+
+This proves the delegation is working correctly — Shabbeer has exactly the permissions needed to do Help Desk work, and nothing more. In a real company, this means Help Desk staff can handle "I forgot my password" and "my account is locked" tickets without ever needing Domain Admin access.
+
